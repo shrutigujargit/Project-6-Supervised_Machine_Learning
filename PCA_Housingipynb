@@ -1,0 +1,510 @@
+{
+ "cells": [
+  {
+   "cell_type": "code",
+   "execution_count": 5,
+   "id": "0cf5c590-9319-4481-aff6-37424559df3f",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "import pandas as pd\n",
+    "import numpy as np\n",
+    "import time\n",
+    "import matplotlib.pyplot as plt\n",
+    "from scipy.stats import randint\n",
+    "import seaborn as sns\n",
+    "from sklearn.model_selection import train_test_split\n",
+    "from sklearn.metrics import mean_squared_error, mean_absolute_error, mean_absolute_percentage_error, r2_score\n",
+    "from sklearn.preprocessing import StandardScaler, MinMaxScaler\n",
+    "from sklearn.impute import SimpleImputer\n",
+    "from sklearn.preprocessing import OneHotEncoder\n",
+    "from sklearn.preprocessing import OrdinalEncoder\n",
+    "from sklearn.pipeline import make_pipeline\n",
+    "from sklearn.compose import ColumnTransformer\n",
+    "from sklearn.model_selection import GridSearchCV, RandomizedSearchCV\n",
+    "from sklearn.feature_selection import RFECV\n",
+    "from sklearn.decomposition import PCA\n",
+    "# reading\n",
+    "df = pd.read_csv(\"housing_prices.csv\")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 6,
+   "id": "cb903c64-94f7-41da-b9a4-c0b8205aa2b0",
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "MSSubClass         0\n",
+       "MSZoning           0\n",
+       "LotFrontage      259\n",
+       "LotArea            0\n",
+       "Street             0\n",
+       "                ... \n",
+       "MoSold             0\n",
+       "YrSold             0\n",
+       "SaleType           0\n",
+       "SaleCondition      0\n",
+       "SalePrice          0\n",
+       "Length: 80, dtype: int64"
+      ]
+     },
+     "execution_count": 6,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "df = df.set_index('Id')\n",
+    "df.isna().sum()\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 7,
+   "id": "cbe3c101-b23a-44a7-8c3e-f3e2c94b5192",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "y = df['SalePrice'].copy()\n",
+    "X = df.drop(columns=['SalePrice']).copy()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 8,
+   "id": "4b7b2e14-dd51-4ef4-813b-27d096b16457",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "X_train, X_test, y_train, y_test = train_test_split(X, y, train_size=.8, random_state=1230000)\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "ffc99d4a-013b-4b52-9e3c-2cb773689617",
+   "metadata": {},
+   "source": [
+    "### preprocessing pipeline\n",
+    "Preprocessing pipelines: Those pipelines only transform the predictor features (the X) by filling NAs, encoding categorical features, scaling, etc. You always have to fit them with X_train. Then, you can call the .transform() method to transform both the X_train and the X_test. (Sometimes, you fit and transform X_train in a single step, by using the .fit_transform() method, but you're still performing these 2 separate steps). Any time that you call transform() you get as an output the transformed data, X_train or X_test."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 9,
+   "id": "86bac607-788c-4c7f-aa2a-2b03d6369576",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "X_num_col = X_train.select_dtypes(include=\"number\").copy().columns\n",
+    "X_cat_col = X_train.select_dtypes(exclude=\"number\").copy().columns"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 10,
+   "id": "1b64c197-43d8-4d26-bcb1-460e8808bbed",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "num_pipe = make_pipeline(\n",
+    "    SimpleImputer(strategy=\"median\"),\n",
+    "    MinMaxScaler())\n",
+    "    #StandardScaler())\n",
+    "\n",
+    "cat_pipe = make_pipeline(\n",
+    "    #SimpleImputer(strategy=\"constant\", fill_value='NaN'),\n",
+    "    SimpleImputer(strategy=\"most_frequent\"),\n",
+    "    OneHotEncoder(drop=\"first\", handle_unknown=\"ignore\", sparse=False))\n",
+    "    #OneHotEncoder(drop=\"first\"))"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 11,
+   "id": "67b10cf7-1d2b-4bd7-b493-e027d8f33899",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "preprocessor = ColumnTransformer(\n",
+    "    transformers=[\n",
+    "        (\"num_pipe\", num_pipe, X_num_col),\n",
+    "        (\"cat_pipe\", cat_pipe, X_cat_col)])"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "4cf1a6b6-aea6-4d21-b439-6847a0d42908",
+   "metadata": {},
+   "source": [
+    "Create your preprocessing pipeline, let's say it's full_pipeline.\n",
+    "Fit it to the train set: full_pipeline.fit(X_train)\n",
+    "Transform the train set: X_train_preprocessed = full_pipeline.transform(X_train)\n",
+    "Transform the test set: X_test_preprocessed = full_pipeline.transform(X_test) Note that so far we have not needed neither the y_train nor the y_test. This is because we are not modelling yet. We are just preprocessing data (cleaning, transforming, wrangling, preparing, imputing, encoding... only the predictors! not the target!)\n",
+    "Fit a model to the preprocessed train set:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 12,
+   "id": "025ba213-7042-46c6-9efc-10371a6a13af",
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "(1168, 241)"
+      ]
+     },
+     "execution_count": 12,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "preprocessor.fit_transform(X_train).shape"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 13,
+   "id": "c8e2821e-3387-42d4-a882-62ec64b8a9c1",
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "(292, 202)"
+      ]
+     },
+     "execution_count": 13,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "preprocessor.fit_transform(X_test).shape"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 16,
+   "id": "0eda4ab4-9a8e-4d44-9e7c-f909a28c5eb1",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "performances = {}"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "08ac1324-2f4d-4136-b5e6-515851ea69f1",
+   "metadata": {},
+   "source": [
+    "### Quick baseline models (baseline for performance)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 17,
+   "id": "7b0396b2-0ac9-4299-94ee-b7cc71f2eef5",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stderr",
+     "output_type": "stream",
+     "text": [
+      "C:\\Users\\shrut\\anaconda3\\lib\\site-packages\\sklearn\\preprocessing\\_encoders.py:188: UserWarning: Found unknown categories in columns [5, 14, 15, 27] during transform. These unknown categories will be encoded as all zeros\n",
+      "  warnings.warn(\n"
+     ]
+    },
+    {
+     "data": {
+      "text/plain": [
+       "{'baseline_tree': 0.48161634210415794}"
+      ]
+     },
+     "execution_count": 17,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "# Decision tree\n",
+    "from sklearn.tree import DecisionTreeClassifier\n",
+    "\n",
+    "#dt = Decision tree\n",
+    "full_pipe_dt = make_pipeline ( preprocessor, DecisionTreeClassifier())\n",
+    "\n",
+    "full_pipe_dt.fit(X_train, y_train)\n",
+    "\n",
+    "tree_pred = full_pipe_dt.predict(X_test)\n",
+    "\n",
+    "performances[\"baseline_tree\"]= r2_score(y_test, tree_pred)\n",
+    "performances\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "0885e90b-2d5f-4c4f-b7d7-5f254620d7a3",
+   "metadata": {},
+   "source": [
+    "# K Nearest neighbors\n",
+    "\n",
+    "from sklearn.neighbors import KNeighborsRegressor\n",
+    "full_pipe_kn = make_pipeline(\n",
+    "    preprocessor,\n",
+    "    KNeighborsRegressor(n_neighbors=3))\n",
+    "\n",
+    "full_pipe_kn.fit(X_train, y_train)\n",
+    "\n",
+    "kn_pred = full_pipe_kn.predict(X_test)\n",
+    "\n",
+    "performances[\"baseline_kn\"]= r2_score(y_test, kn_pred)\n",
+    "performances"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 18,
+   "id": "20825264-30f2-4936-8760-99ac5699dde9",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stderr",
+     "output_type": "stream",
+     "text": [
+      "C:\\Users\\shrut\\anaconda3\\lib\\site-packages\\sklearn\\preprocessing\\_encoders.py:188: UserWarning: Found unknown categories in columns [5, 14, 15, 27] during transform. These unknown categories will be encoded as all zeros\n",
+      "  warnings.warn(\n"
+     ]
+    },
+    {
+     "data": {
+      "text/plain": [
+       "{'baseline_tree': 0.48161634210415794, 'baseline_LR': -4023534770102086.0}"
+      ]
+     },
+     "execution_count": 18,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "# LR\n",
+    "from sklearn.linear_model import LinearRegression\n",
+    "full_pipe_LR = make_pipeline(\n",
+    "    preprocessor,\n",
+    "    LinearRegression())\n",
+    "\n",
+    "full_pipe_LR.fit(X_train, y_train)\n",
+    "\n",
+    "LR_pred = full_pipe_LR.predict(X_test)\n",
+    "\n",
+    "performances[\"baseline_LR\"]= r2_score(y_test, LR_pred)\n",
+    "performances\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "f0d962d5-f689-48ba-b094-f8dfd895d98e",
+   "metadata": {},
+   "source": [
+    "### PCA"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 19,
+   "id": "5583c922-c86f-4354-874c-00ed112b9550",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stderr",
+     "output_type": "stream",
+     "text": [
+      "C:\\Users\\shrut\\anaconda3\\lib\\site-packages\\sklearn\\preprocessing\\_encoders.py:188: UserWarning: Found unknown categories in columns [5, 14, 15, 27] during transform. These unknown categories will be encoded as all zeros\n",
+      "  warnings.warn(\n"
+     ]
+    },
+    {
+     "data": {
+      "text/plain": [
+       "{'baseline_tree': 0.48161634210415794,\n",
+       " 'baseline_LR': -4023534770102086.0,\n",
+       " 'PCA95_tree': 0.18281039163329094}"
+      ]
+     },
+     "execution_count": 19,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "# Decision tree\n",
+    "from sklearn.tree import DecisionTreeClassifier\n",
+    "\n",
+    "full_pipe_dt = make_pipeline(\n",
+    "    preprocessor,\n",
+    "    PCA(n_components=0.95),\n",
+    "    DecisionTreeClassifier(max_depth=5))\n",
+    "\n",
+    "full_pipe_dt.fit(X_train, y_train)\n",
+    "\n",
+    "tree_pred = full_pipe_dt.predict(X_test)\n",
+    "\n",
+    "performances[\"PCA95_tree\"]= r2_score(y_test, tree_pred)\n",
+    "performances"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 20,
+   "id": "ed606b24-ef3b-4773-a19b-3cfbbc62d60c",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stderr",
+     "output_type": "stream",
+     "text": [
+      "C:\\Users\\shrut\\anaconda3\\lib\\site-packages\\sklearn\\preprocessing\\_encoders.py:188: UserWarning: Found unknown categories in columns [5, 14, 15, 27] during transform. These unknown categories will be encoded as all zeros\n",
+      "  warnings.warn(\n"
+     ]
+    },
+    {
+     "data": {
+      "text/plain": [
+       "{'baseline_tree': 0.48161634210415794,\n",
+       " 'baseline_LR': -4023534770102086.0,\n",
+       " 'PCA95_tree': 0.18281039163329094,\n",
+       " 'PCA95_kn': 0.6793383451055091}"
+      ]
+     },
+     "execution_count": 20,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "# K Nearest neighbors\n",
+    "from sklearn.neighbors import KNeighborsRegressor\n",
+    "full_pipe_kn = make_pipeline(\n",
+    "    preprocessor,\n",
+    "    PCA(n_components=0.95),\n",
+    "    KNeighborsRegressor(n_neighbors=3))\n",
+    "\n",
+    "full_pipe_kn.fit(X_train, y_train)\n",
+    "\n",
+    "kn_pred = full_pipe_kn.predict(X_test)\n",
+    "\n",
+    "performances[\"PCA95_kn\"]= r2_score(y_test, kn_pred)\n",
+    "performances"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "b066da65-a326-4ec0-a70c-4156d39a9c3f",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# LR\n",
+    "from sklearn.linear_model import LinearRegression\n",
+    "full_pipe_LR = make_pipeline(\n",
+    "    preprocessor,\n",
+    "    PCA(n_components=0.95),\n",
+    "    LinearRegression())\n",
+    "\n",
+    "full_pipe_LR.fit(X_train, y_train)\n",
+    "\n",
+    "LR_pred = full_pipe_LR.predict(X_test)\n",
+    "\n",
+    "performances[\"PCA95_LR\"]= r2_score(y_test, LR_pred)\n",
+    "performances"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "1c0e0284-dba8-408b-baab-64bec1c5372b",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "preprocessor.fit(X_train)\n",
+    "\n",
+    "X_scaled = preprocessor.transform(X_train)\n",
+    "\n",
+    "pca = PCA(n_components=None) # pick number of components\n",
+    "X_reduced = pca.fit_transform(X_scaled)\n",
+    "np.round(pca.explained_variance_ratio_, 4)*100"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "28d97cec-751d-47f5-9bc6-44797af8dd10",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "cumsum = np.cumsum(pca.explained_variance_ratio_)\n",
+    "\n",
+    "fig, ax = plt.subplots(figsize=(8, 4))\n",
+    "ax.plot(cumsum, label = \"Explained variance\");"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "7139aeb3-9e40-4438-b880-c27a17916e0c",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "cumsum = np.cumsum(pca.explained_variance_ratio_)\n",
+    "\n",
+    "fig, ax = plt.subplots(figsize=(8, 4))\n",
+    "ax.plot(cumsum, label = \"Explained variance\");\n",
+    "\n",
+    "d = np.argmax(cumsum >= 0.95) # with how many components do we get 0.95 of the variance\n",
+    "\n",
+    "ax.plot([d, d], [0, 0.95], \"k:\")\n",
+    "ax.plot([0, d], [0.95, 0.95], \"k:\")\n",
+    "ax.plot(d, 0.95, \"ko\")\n",
+    "\n",
+    "ax.set_ylabel(\"Explained Variance\")\n",
+    "ax.set_xlabel(\"Number of Components\");"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "f1412bcf-0d66-41c2-a64c-1e7f07b2f035",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "np.argmax(cumsum >= 0.95) # with how many components do we get 0.95 of the variance"
+   ]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3 (ipykernel)",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.9.7"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}
